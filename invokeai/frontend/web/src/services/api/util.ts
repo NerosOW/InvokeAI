@@ -14,24 +14,42 @@ export const getIsImageInDateRange = (
   if (!data) {
     return false;
   }
-  const cacheImageDTOS = imagesSelectors.selectAll(data);
 
-  if (cacheImageDTOS.length > 1) {
-    // Images are sorted by `created_at` DESC
-    // check if the image is newer than the oldest image in the cache
-    const createdDate = new Date(imageDTO.created_at);
-    const oldestImage = cacheImageDTOS[cacheImageDTOS.length - 1];
-    if (!oldestImage) {
-      // satisfy TS gods, we already confirmed the array has more than one image
-      return false;
-    }
-    const oldestDate = new Date(oldestImage.created_at);
-    return createdDate >= oldestDate;
-  } else if ([0, 1].includes(cacheImageDTOS.length)) {
-    // if there are only 1 or 0 images in the cache, we consider the image to be in the date range
+  const totalCachedImageDtos = imagesSelectors.selectAll(data);
+
+  if (totalCachedImageDtos.length <= 1) {
     return true;
   }
-  return false;
+
+  const cachedPinnedImages = [];
+  const cachedUnpinnedImages = [];
+
+  for (let index = 0; index < totalCachedImageDtos.length; index++) {
+    const image = totalCachedImageDtos[index];
+    if (image?.pinned) cachedPinnedImages.push(image)
+    if (!image?.pinned) cachedUnpinnedImages.push(image)
+  }
+
+  const lastPinnedImage = cachedPinnedImages[cachedPinnedImages.length - 1];
+  const lastUnpinnedImage = cachedUnpinnedImages[cachedUnpinnedImages.length - 1];
+
+  if (!lastPinnedImage || !lastUnpinnedImage) {
+    // satisfy TS gods, we already confirmed the array has more than one image
+    return false;
+  }
+
+  if (imageDTO.pinned) {
+    // if pinning or already pinned, want to look in list of pinned images 
+    const createdDate = new Date(imageDTO.created_at);
+    const oldestDate = new Date(lastPinnedImage.created_at);
+    return createdDate >= oldestDate;
+  } else {
+    // if unpinning or already unpinned, want to look in list of unpinned images 
+    const createdDate = new Date(imageDTO.created_at);
+    const oldestDate = new Date(lastUnpinnedImage.created_at);
+    return createdDate >= oldestDate;
+  }
+
 };
 
 export const getCategories = (imageDTO: ImageDTO) => {
@@ -45,7 +63,16 @@ export const getCategories = (imageDTO: ImageDTO) => {
 // with some other store of data. We will use the RTK Query cache as that store.
 export const imagesAdapter = createEntityAdapter<ImageDTO>({
   selectId: (image) => image.image_name,
-  sortComparer: (a, b) => dateComparator(b.updated_at, a.updated_at),
+  sortComparer: (a, b) => {
+    // Compare pinned images first
+    if (a.pinned && !b.pinned) {
+      return -1;
+    }
+    if (!a.pinned && b.pinned) {
+      return 1;
+    }
+    return dateComparator(b.created_at, a.created_at)
+  },
 });
 
 // Create selectors for the adapter.

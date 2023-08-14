@@ -296,11 +296,11 @@ export const imagesApi = api.injectEndpoints({
             imageDTO.image_category
           )
             ? boardsApi.endpoints.getBoardImagesTotal.select(
-                imageDTO.board_id ?? 'none'
-              )(getState())
+              imageDTO.board_id ?? 'none'
+            )(getState())
             : boardsApi.endpoints.getBoardAssetsTotal.select(
-                imageDTO.board_id ?? 'none'
-              )(getState());
+              imageDTO.board_id ?? 'none'
+            )(getState());
 
           // IF it eligible for insertion into existing $cache
           // "eligible" means either:
@@ -379,6 +379,116 @@ export const imagesApi = api.injectEndpoints({
             )
           )
         );
+
+        try {
+          await queryFulfilled;
+        } catch {
+          patches.forEach((patchResult) => patchResult.undo());
+        }
+      },
+    }),
+    /**
+     * Change an image's `pinned` state.
+     */
+    changeImagePinned: build.mutation<
+      ImageDTO,
+      { imageDTO: ImageDTO; pinned: boolean }
+    >({
+      query: ({ imageDTO, pinned }) => ({
+        url: `images/i/${imageDTO.image_name}`,
+        method: 'PATCH',
+        body: { pinned },
+      }),
+      invalidatesTags: (result, error, { imageDTO }) => {
+        const categories = getCategories(imageDTO);
+        return [
+          {
+            type: 'ImageList',
+            id: getListImagesUrl({
+              board_id: imageDTO.board_id,
+              categories,
+            }),
+          },
+        ]
+      },
+      async onQueryStarted(
+        { imageDTO, pinned },
+        { dispatch, queryFulfilled, getState }
+      ) {
+        /**
+         * Cache changes for `changeImagePinned`:
+         * - *update* getImageDTO
+         */
+
+        // Store patches so we can undo if the query fails
+        const patches: PatchCollection[] = [];
+
+        // *update* getImageDTO
+        patches.push(
+          dispatch(
+            imagesApi.util.updateQueryData(
+              'getImageDTO',
+              imageDTO.image_name,
+              (draft) => {
+                Object.assign(draft, { pinned });
+              }
+            )
+          )
+        );
+
+        const categories = getCategories(imageDTO);
+
+        const queryArgs = {
+          board_id: imageDTO.board_id ?? 'none',
+          categories,
+        };
+
+        const currentCache = imagesApi.endpoints.listImages.select(queryArgs)(
+          getState()
+        );
+
+        const { data: total } = IMAGE_CATEGORIES.includes(
+          imageDTO.image_category
+        )
+          ? boardsApi.endpoints.getBoardImagesTotal.select(
+            imageDTO.board_id ?? 'none'
+          )(getState())
+          : boardsApi.endpoints.getBoardAssetsTotal.select(
+            imageDTO.board_id ?? 'none'
+          )(getState());
+
+        // IF it eligible for insertion into existing $cache
+        // "eligible" means either:
+        // - The cache is fully populated, with all images in the db cached
+        //    OR
+        // - The image's `created_at` is within the range of the cached images within that pinned state
+
+        const updatedImage: ImageDTO = { ...imageDTO, pinned }
+
+        const isCacheFullyPopulated =
+          currentCache.data && currentCache.data.ids.length >= (total ?? 0);
+
+        const isInDateRange = getIsImageInDateRange(
+          currentCache.data,
+          updatedImage
+        );
+
+        // should we remove images from cache if _not_ in date range? ie you are showing 100 of 101 pinned images and you unpin one. technically it should disappear from list.
+
+        if (isCacheFullyPopulated || isInDateRange) {
+          // *upsert* to $cache
+          patches.push(
+            dispatch(
+              imagesApi.util.updateQueryData(
+                'listImages',
+                queryArgs,
+                (draft) => {
+                  imagesAdapter.upsertOne(draft, updatedImage);
+                }
+              )
+            )
+          );
+        }
 
         try {
           await queryFulfilled;
@@ -726,11 +836,11 @@ export const imagesApi = api.injectEndpoints({
             imageDTO.image_category
           )
             ? boardsApi.endpoints.getBoardImagesTotal.select(
-                imageDTO.board_id ?? 'none'
-              )(getState())
+              imageDTO.board_id ?? 'none'
+            )(getState())
             : boardsApi.endpoints.getBoardAssetsTotal.select(
-                imageDTO.board_id ?? 'none'
-              )(getState());
+              imageDTO.board_id ?? 'none'
+            )(getState());
 
           const isCacheFullyPopulated =
             currentCache.data && currentCache.data.ids.length >= (total ?? 0);
@@ -846,11 +956,11 @@ export const imagesApi = api.injectEndpoints({
           imageDTO.image_category
         )
           ? boardsApi.endpoints.getBoardImagesTotal.select(
-              imageDTO.board_id ?? 'none'
-            )(getState())
+            imageDTO.board_id ?? 'none'
+          )(getState())
           : boardsApi.endpoints.getBoardAssetsTotal.select(
-              imageDTO.board_id ?? 'none'
-            )(getState());
+            imageDTO.board_id ?? 'none'
+          )(getState());
 
         const isCacheFullyPopulated =
           currentCache.data && currentCache.data.ids.length >= (total ?? 0);
@@ -973,11 +1083,11 @@ export const imagesApi = api.injectEndpoints({
               imageDTO.image_category
             )
               ? boardsApi.endpoints.getBoardImagesTotal.select(
-                  new_board_id ?? 'none'
-                )(getState())
+                new_board_id ?? 'none'
+              )(getState())
               : boardsApi.endpoints.getBoardAssetsTotal.select(
-                  new_board_id ?? 'none'
-                )(getState());
+                new_board_id ?? 'none'
+              )(getState());
 
             const isCacheFullyPopulated =
               currentCache.data &&
@@ -1104,11 +1214,11 @@ export const imagesApi = api.injectEndpoints({
               imageDTO.image_category
             )
               ? boardsApi.endpoints.getBoardImagesTotal.select(
-                  imageDTO.board_id ?? 'none'
-                )(getState())
+                imageDTO.board_id ?? 'none'
+              )(getState())
               : boardsApi.endpoints.getBoardAssetsTotal.select(
-                  imageDTO.board_id ?? 'none'
-                )(getState());
+                imageDTO.board_id ?? 'none'
+              )(getState());
 
             const isCacheFullyPopulated =
               currentCache.data && currentCache.data.ids.length >= (total ?? 0);
@@ -1158,6 +1268,7 @@ export const {
   useRemoveImageFromBoardMutation,
   useChangeImageIsIntermediateMutation,
   useChangeImageSessionIdMutation,
+  useChangeImagePinnedMutation,
   useDeleteBoardAndImagesMutation,
   useDeleteBoardMutation,
 } = imagesApi;

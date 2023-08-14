@@ -29,10 +29,14 @@ import {
   FaShare,
   FaTrash,
 } from 'react-icons/fa';
-import { useGetImageMetadataQuery } from 'services/api/endpoints/images';
+import {
+  useChangeImagePinnedMutation,
+  useGetImageMetadataQuery,
+} from 'services/api/endpoints/images';
 import { ImageDTO } from 'services/api/types';
 import { useDebounce } from 'use-debounce';
 import { sentImageToCanvas, sentImageToImg2Img } from '../../store/actions';
+import { BsBookmarkStar, BsFillBookmarkStarFill } from 'react-icons/bs';
 
 type SingleSelectionMenuItemsProps = {
   imageDTO: ImageDTO;
@@ -58,6 +62,8 @@ const SingleSelectionMenuItems = (props: SingleSelectionMenuItemsProps) => {
       ? skipToken
       : debouncedMetadataQueryArg ?? skipToken
   );
+
+  const [togglePin] = useChangeImagePinnedMutation();
 
   const { isClipboardAPIAvailable, copyImageToClipboard } =
     useCopyImageToClipboard();
@@ -126,6 +132,14 @@ const SingleSelectionMenuItems = (props: SingleSelectionMenuItemsProps) => {
   const handleCopyImage = useCallback(() => {
     copyImageToClipboard(imageDTO.image_url);
   }, [copyImageToClipboard, imageDTO.image_url]);
+
+  const handlePinImage = useCallback(() => {
+    togglePin({ imageDTO, pinned: true });
+  }, [togglePin, imageDTO]);
+
+  const handleUnpinImage = useCallback(() => {
+    togglePin({ imageDTO, pinned: false });
+  }, [togglePin, imageDTO]);
 
   return (
     <>
@@ -196,6 +210,18 @@ const SingleSelectionMenuItems = (props: SingleSelectionMenuItemsProps) => {
       <MenuItem icon={<FaFolder />} onClickCapture={handleChangeBoard}>
         Change Board
       </MenuItem>
+      {imageDTO.pinned ? (
+        <MenuItem icon={<BsBookmarkStar />} onClickCapture={handleUnpinImage}>
+          Unpin Image
+        </MenuItem>
+      ) : (
+        <MenuItem
+          icon={<BsFillBookmarkStarFill />}
+          onClickCapture={handlePinImage}
+        >
+          Pin Image
+        </MenuItem>
+      )}
       <MenuItem
         sx={{ color: 'error.600', _dark: { color: 'error.300' } }}
         icon={<FaTrash />}
