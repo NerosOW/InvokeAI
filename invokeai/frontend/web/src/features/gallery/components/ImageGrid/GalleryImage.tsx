@@ -1,4 +1,4 @@
-import { Box, Flex } from '@chakra-ui/react';
+import { Box, Flex, useColorModeValue } from '@chakra-ui/react';
 import {
   ImageDTOsDraggableData,
   ImageDraggableData,
@@ -9,12 +9,15 @@ import IAIDndImage from 'common/components/IAIDndImage';
 import IAIFillSkeleton from 'common/components/IAIFillSkeleton';
 import { useMultiselect } from 'features/gallery/hooks/useMultiselect.ts';
 import { imagesToDeleteSelected } from 'features/deleteImageModal/store/slice';
-import { MouseEvent, memo, useCallback, useMemo } from 'react';
+import { MouseEvent, memo, useCallback, useMemo, useState } from 'react';
 import {
   useChangeImagePinnedMutation,
   useGetImageDTOQuery,
 } from 'services/api/endpoints/images';
-import { BsBookmarkStar, BsFillBookmarkStarFill } from 'react-icons/bs';
+import { MdStar, MdStarBorder } from 'react-icons/md';
+import { FaTrash } from 'react-icons/fa';
+import IAIIconButton from '../../../../common/components/IAIIconButton';
+import IAIDndImageIcon from '../../../../common/components/IAIDndImageIcon';
 
 interface HoverableImageProps {
   imageName: string;
@@ -70,6 +73,33 @@ const GalleryImage = (props: HoverableImageProps) => {
     }
   }, [togglePin, imageDTO]);
 
+  const [isHovered, setIsHovered] = useState(false);
+
+  const pinIcon = useMemo(() => {
+    if (imageDTO?.pinned) return <MdStar size="20" />;
+    if (!imageDTO?.pinned && isHovered) return <MdStarBorder size="20" />;
+  }, [imageDTO?.pinned, isHovered]);
+
+  const resetIconShadow = useColorModeValue(
+    `drop-shadow(0px 0px 0.1rem var(--invokeai-colors-base-600))`,
+    `drop-shadow(0px 0px 0.1rem var(--invokeai-colors-base-800))`
+  );
+
+  const iconButtonStyles = {
+    position: 'absolute',
+    top: 1,
+    insetInlineEnd: 1,
+    p: 0,
+    minW: 0,
+    svg: {
+      transitionProperty: 'common',
+      transitionDuration: 'normal',
+      fill: 'base.100',
+      _hover: { fill: 'base.50' },
+      filter: resetIconShadow,
+    },
+  };
+
   if (!imageDTO) {
     return <IAIFillSkeleton />;
   }
@@ -91,18 +121,34 @@ const GalleryImage = (props: HoverableImageProps) => {
           draggableData={draggableData}
           isSelected={isSelected}
           minSize={0}
-          onClickReset={togglePinnedState}
           imageSx={{ w: 'full', h: 'full' }}
           isDropDisabled={true}
           isUploadDisabled={true}
           thumbnail={true}
           withHoverOverlay
-          resetIcon={
-            imageDTO.pinned ? <BsFillBookmarkStarFill /> : <BsBookmarkStar />
-          }
-          resetTooltip="Pin image"
-          withResetIcon={true}
-        />
+          onMouseOver={() => setIsHovered(true)}
+          onMouseOut={() => setIsHovered(false)}
+        >
+          <>
+            <IAIDndImageIcon
+              onClick={togglePinnedState}
+              icon={pinIcon}
+              tooltip={imageDTO.pinned ? 'Unstar' : 'Star'}
+            />
+
+            {isHovered && shouldShowDeleteButton && (
+              <IAIDndImageIcon
+                onClick={handleDelete}
+                icon={<FaTrash />}
+                tooltip={'Delete'}
+                styleOverrides={{
+                  bottom: 1,
+                  top: 'auto',
+                }}
+              />
+            )}
+          </>
+        </IAIDndImage>
       </Flex>
     </Box>
   );

@@ -78,7 +78,6 @@ const ImageInputFieldComponent = (
         imageDTO={imageDTO}
         droppableData={droppableData}
         draggableData={draggableData}
-        onClickReset={handleReset}
         postUploadAction={postUploadAction}
       />
     </Flex>
