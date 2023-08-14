@@ -712,6 +712,51 @@ export type components = {
        */
       collection: (unknown)[];
     };
+    /**
+     * ColorCorrectInvocation 
+     * @description Shifts the colors of a target image to match the reference image, optionally
+     * using a mask to only color-correct certain regions of the target image.
+     */
+    ColorCorrectInvocation: {
+      /**
+       * Id 
+       * @description The id of this node. Must be unique among all nodes.
+       */
+      id: string;
+      /**
+       * Is Intermediate 
+       * @description Whether or not this node is an intermediate node. 
+       * @default false
+       */
+      is_intermediate?: boolean;
+      /**
+       * Type 
+       * @default color_correct 
+       * @enum {string}
+       */
+      type?: "color_correct";
+      /**
+       * Image 
+       * @description The image to color-correct
+       */
+      image?: components["schemas"]["ImageField"];
+      /**
+       * Reference 
+       * @description Reference image for color-correction
+       */
+      reference?: components["schemas"]["ImageField"];
+      /**
+       * Mask 
+       * @description Mask to use when applying color-correction
+       */
+      mask?: components["schemas"]["ImageField"];
+      /**
+       * Mask Blur Radius 
+       * @description Mask blur radius 
+       * @default 8
+       */
+      mask_blur_radius?: number;
+    };
     /** ColorField */
     ColorField: {
       /**
@@ -1164,10 +1209,15 @@ export type components = {
        */
       refiner_scheduler?: string;
       /**
-       * Refiner Aesthetic Store 
+       * Refiner Positive Aesthetic Store 
        * @description The aesthetic score used for the refiner
        */
-      refiner_aesthetic_store?: number;
+      refiner_positive_aesthetic_store?: number;
+      /**
+       * Refiner Negative Aesthetic Store 
+       * @description The aesthetic score used for the refiner
+       */
+      refiner_negative_aesthetic_store?: number;
       /**
        * Refiner Start 
        * @description The start value used for refiner denoising
@@ -1229,6 +1279,93 @@ export type components = {
     DeleteImagesFromListResult: {
       /** Deleted Images */
       deleted_images: (string)[];
+    };
+    /**
+     * DenoiseLatentsInvocation 
+     * @description Denoises noisy latents to decodable images
+     */
+    DenoiseLatentsInvocation: {
+      /**
+       * Id 
+       * @description The id of this node. Must be unique among all nodes.
+       */
+      id: string;
+      /**
+       * Is Intermediate 
+       * @description Whether or not this node is an intermediate node. 
+       * @default false
+       */
+      is_intermediate?: boolean;
+      /**
+       * Type 
+       * @default denoise_latents 
+       * @enum {string}
+       */
+      type?: "denoise_latents";
+      /**
+       * Positive Conditioning 
+       * @description Positive conditioning for generation
+       */
+      positive_conditioning?: components["schemas"]["ConditioningField"];
+      /**
+       * Negative Conditioning 
+       * @description Negative conditioning for generation
+       */
+      negative_conditioning?: components["schemas"]["ConditioningField"];
+      /**
+       * Noise 
+       * @description The noise to use
+       */
+      noise?: components["schemas"]["LatentsField"];
+      /**
+       * Steps 
+       * @description The number of steps to use to generate the image 
+       * @default 10
+       */
+      steps?: number;
+      /**
+       * Cfg Scale 
+       * @description The Classifier-Free Guidance, higher values may result in a result closer to the prompt 
+       * @default 7.5
+       */
+      cfg_scale?: number | (number)[];
+      /**
+       * Denoising Start 
+       * @default 0
+       */
+      denoising_start?: number;
+      /**
+       * Denoising End 
+       * @default 1
+       */
+      denoising_end?: number;
+      /**
+       * Scheduler 
+       * @description The scheduler to use 
+       * @default euler 
+       * @enum {string}
+       */
+      scheduler?: "ddim" | "ddpm" | "deis" | "lms" | "lms_k" | "pndm" | "heun" | "heun_k" | "euler" | "euler_k" | "euler_a" | "kdpm_2" | "kdpm_2_a" | "dpmpp_2s" | "dpmpp_2s_k" | "dpmpp_2m" | "dpmpp_2m_k" | "dpmpp_2m_sde" | "dpmpp_2m_sde_k" | "dpmpp_sde" | "dpmpp_sde_k" | "unipc";
+      /**
+       * Unet 
+       * @description UNet submodel
+       */
+      unet?: components["schemas"]["UNetField"];
+      /**
+       * Control 
+       * @description The control to use
+       */
+      control?: components["schemas"]["ControlField"] | (components["schemas"]["ControlField"])[];
+      /**
+       * Latents 
+       * @description The latents to use as a base image
+       */
+      latents?: components["schemas"]["LatentsField"];
+      /**
+       * Mask 
+       * @description Mask
+       */
+      mask?: components["schemas"]["ImageField"];
     };
     /**
      * DivideInvocation 
@@ -2616,171 +2753,6 @@ export type components = {
       seed?: number;
     };
     /**
-     * InpaintInvocation 
-     * @description Generates an image using inpaint.
-     */
-    InpaintInvocation: {
-      /**
-       * Id 
-       * @description The id of this node. Must be unique among all nodes.
-       */
-      id: string;
-      /**
-       * Is Intermediate 
-       * @description Whether or not this node is an intermediate node. 
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Type 
-       * @default inpaint 
-       * @enum {string}
-       */
-      type?: "inpaint";
-      /**
-       * Positive Conditioning 
-       * @description Positive conditioning for generation
-       */
-      positive_conditioning?: components["schemas"]["ConditioningField"];
-      /**
-       * Negative Conditioning 
-       * @description Negative conditioning for generation
-       */
-      negative_conditioning?: components["schemas"]["ConditioningField"];
-      /**
-       * Seed 
-       * @description The seed to use (omit for random)
-       */
-      seed?: number;
-      /**
-       * Steps 
-       * @description The number of steps to use to generate the image 
-       * @default 30
-       */
-      steps?: number;
-      /**
-       * Width 
-       * @description The width of the resulting image 
-       * @default 512
-       */
-      width?: number;
-      /**
-       * Height 
-       * @description The height of the resulting image 
-       * @default 512
-       */
-      height?: number;
-      /**
-       * Cfg Scale 
-       * @description The Classifier-Free Guidance, higher values may result in a result closer to the prompt 
-       * @default 7.5
-       */
-      cfg_scale?: number;
-      /**
-       * Scheduler 
-       * @description The scheduler to use 
-       * @default euler 
-       * @enum {string}
-       */
-      scheduler?: "ddim" | "ddpm" | "deis" | "lms" | "lms_k" | "pndm" | "heun" | "heun_k" | "euler" | "euler_k" | "euler_a" | "kdpm_2" | "kdpm_2_a" | "dpmpp_2s" | "dpmpp_2s_k" | "dpmpp_2m" | "dpmpp_2m_k" | "dpmpp_2m_sde" | "dpmpp_2m_sde_k" | "dpmpp_sde" | "dpmpp_sde_k" | "unipc";
-      /**
-       * Unet 
-       * @description UNet model
-       */
-      unet?: components["schemas"]["UNetField"];
-      /**
-       * Vae 
-       * @description Vae model
-       */
-      vae?: components["schemas"]["VaeField"];
-      /**
-       * Image 
-       * @description The input image
-       */
-      image?: components["schemas"]["ImageField"];
-      /**
-       * Strength 
-       * @description The strength of the original image 
-       * @default 0.75
-       */
-      strength?: number;
-      /**
-       * Fit 
-       * @description Whether or not the result should be fit to the aspect ratio of the input image 
-       * @default true
-       */
-      fit?: boolean;
-      /**
-       * Mask 
-       * @description The mask
-       */
-      mask?: components["schemas"]["ImageField"];
-      /**
-       * Seam Size 
-       * @description The seam inpaint size (px) 
-       * @default 96
-       */
-      seam_size?: number;
-      /**
-       * Seam Blur 
-       * @description The seam inpaint blur radius (px) 
-       * @default 16
-       */
-      seam_blur?: number;
-      /**
-       * Seam Strength 
-       * @description The seam inpaint strength 
-       * @default 0.75
-       */
-      seam_strength?: number;
-      /**
-       * Seam Steps 
-       * @description The number of steps to use for seam inpaint 
-       * @default 30
-       */
-      seam_steps?: number;
-      /**
-       * Tile Size 
-       * @description The tile infill method size (px) 
-       * @default 32
-       */
-      tile_size?: number;
-      /**
-       * Infill Method 
-       * @description The method used to infill empty regions (px) 
-       * @default patchmatch 
-       * @enum {string}
-       */
-      infill_method?: "patchmatch" | "tile" | "solid";
-      /**
-       * Inpaint Width 
-       * @description The width of the inpaint region (px)
-       */
-      inpaint_width?: number;
-      /**
-       * Inpaint Height 
-       * @description The height of the inpaint region (px)
-       */
-      inpaint_height?: number;
-      /**
-       * Inpaint Fill 
-       * @description The solid infill method color 
-       * @default {
-       *   "r": 127,
-       *   "g": 127,
-       *   "b": 127,
-       *   "a": 255
-       * }
-       */
-      inpaint_fill?: components["schemas"]["ColorField"];
-      /**
-       * Inpaint Replace 
-       * @description The amount by which to replace masked areas with latent noise 
-       * @default 0
-       */
-      inpaint_replace?: number;
-    };
-    /**
      * IntCollectionOutput 
      * @description A collection of integers
      */
@@ -2876,6 +2848,11 @@ export type components = {
        * @description The name of the latents
        */
       latents_name: string;
+      /**
+       * Seed 
+       * @description Seed used to generate this latents
+       */
+      seed?: number;
     };
     /**
      * LatentsOutput 
@@ -2953,84 +2930,6 @@ export type components = {
        * @description Optional core metadata to be written to the image
        */
       metadata?: components["schemas"]["CoreMetadata"];
-    };
-    /**
-     * LatentsToLatentsInvocation 
-     * @description Generates latents using latents as base image.
-     */
-    LatentsToLatentsInvocation: {
-      /**
-       * Id 
-       * @description The id of this node. Must be unique among all nodes.
-       */
-      id: string;
-      /**
-       * Is Intermediate 
-       * @description Whether or not this node is an intermediate node. 
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Type 
-       * @default l2l 
-       * @enum {string}
-       */
-      type?: "l2l";
-      /**
-       * Positive Conditioning 
-       * @description Positive conditioning for generation
-       */
-      positive_conditioning?: components["schemas"]["ConditioningField"];
-      /**
-       * Negative Conditioning 
-       * @description Negative conditioning for generation
-       */
-      negative_conditioning?: components["schemas"]["ConditioningField"];
-      /**
-       * Noise 
-       * @description The noise to use
-       */
-      noise?: components["schemas"]["LatentsField"];
-      /**
-       * Steps 
-       * @description The number of steps to use to generate the image 
-       * @default 10
-       */
-      steps?: number;
-      /**
-       * Cfg Scale 
-       * @description The Classifier-Free Guidance, higher values may result in a result closer to the prompt 
-       * @default 7.5
-       */
-      cfg_scale?: number | (number)[];
-      /**
-       * Scheduler 
-       * @description The scheduler to use 
-       * @default euler 
-       * @enum {string}
-       */
-      scheduler?: "ddim" | "ddpm" | "deis" | "lms" | "lms_k" | "pndm" | "heun" | "heun_k" | "euler" | "euler_k" | "euler_a" | "kdpm_2" | "kdpm_2_a" | "dpmpp_2s" | "dpmpp_2s_k" | "dpmpp_2m" | "dpmpp_2m_k" | "dpmpp_2m_sde" | "dpmpp_2m_sde_k" | "dpmpp_sde" | "dpmpp_sde_k" | "unipc";
-      /**
-       * Unet 
-       * @description UNet submodel
-       */
-      unet?: components["schemas"]["UNetField"];
-      /**
-       * Control 
-       * @description The control to use
-       */
-      control?: components["schemas"]["ControlField"] | (components["schemas"]["ControlField"])[];
-      /**
-       * Latents 
-       * @description The latents to use as a base image
-       */
-      latents?: components["schemas"]["LatentsField"];
-      /**
-       * Strength 
-       * @description The strength of the latents to use 
-       * @default 0.7
-       */
-      strength?: number;
     };
     /**
      * LeresImageProcessorInvocation 
@@ -3391,6 +3290,87 @@ export type components = {
       model: components["schemas"]["MainModelField"];
     };
     /**
+     * MaskCombineInvocation 
+     * @description Combine two masks together by multiplying them using `PIL.ImageChops.multiply()`.
+     */
+    MaskCombineInvocation: {
+      /**
+       * Id 
+       * @description The id of this node. Must be unique among all nodes.
+       */
+      id: string;
+      /**
+       * Is Intermediate 
+       * @description Whether or not this node is an intermediate node. 
+       * @default false
+       */
+      is_intermediate?: boolean;
+      /**
+       * Type 
+       * @default mask_combine 
+       * @enum {string}
+       */
+      type?: "mask_combine";
+      /**
+       * Mask1 
+       * @description The first mask to combine
+       */
+      mask1?: components["schemas"]["ImageField"];
+      /**
+       * Mask2 
+       * @description The second image to combine
+       */
+      mask2?: components["schemas"]["ImageField"];
+    };
+    /**
+     * MaskEdgeInvocation 
+     * @description Applies an edge mask to an image
+     */
+    MaskEdgeInvocation: {
+      /**
+       * Id 
+       * @description The id of this node. Must be unique among all nodes.
+       */
+      id: string;
+      /**
+       * Is Intermediate 
+       * @description Whether or not this node is an intermediate node. 
+       * @default false
+       */
+      is_intermediate?: boolean;
+      /**
+       * Type 
+       * @default mask_edge 
+       * @enum {string}
+       */
+      type?: "mask_edge";
+      /**
+       * Image 
+       * @description The image to apply the mask to
+       */
+      image?: components["schemas"]["ImageField"];
+      /**
+       * Edge Size 
+       * @description The size of the edge
+       */
+      edge_size: number;
+      /**
+       * Edge Blur 
+       * @description The amount of blur on the edge
+       */
+      edge_blur: number;
+      /**
+       * Low Threshold 
+       * @description First threshold for the hysteresis procedure in Canny edge detection
+       */
+      low_threshold: number;
+      /**
+       * High Threshold 
+       * @description Second threshold for the hysteresis procedure in Canny edge detection
+       */
+      high_threshold: number;
+    };
+    /**
      * MaskFromAlphaInvocation 
      * @description Extracts the alpha channel of an image as a mask.
      */
@@ -3635,10 +3615,15 @@ export type components = {
        */
       refiner_scheduler?: string;
       /**
-       * Refiner Aesthetic Store 
+       * Refiner Positive Aesthetic Score 
        * @description The aesthetic score used for the refiner
        */
-      refiner_aesthetic_store?: number;
+      refiner_positive_aesthetic_score?: number;
+      /**
+       * Refiner Negative Aesthetic Score 
+       * @description The aesthetic score used for the refiner
+       */
+      refiner_negative_aesthetic_score?: number;
       /**
        * Refiner Start 
        * @description The start value used for refiner denoising
@@ -4960,83 +4945,6 @@ export type components = {
       clip2?: components["schemas"]["ClipField"];
     };
     /**
-     * SDXLLatentsToLatentsInvocation 
-     * @description Generates latents from conditionings.
-     */
-    SDXLLatentsToLatentsInvocation: {
-      /**
-       * Id 
-       * @description The id of this node. Must be unique among all nodes.
-       */
-      id: string;
-      /**
-       * Is Intermediate 
-       * @description Whether or not this node is an intermediate node. 
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Type 
-       * @default l2l_sdxl 
-       * @enum {string}
-       */
-      type?: "l2l_sdxl";
-      /**
-       * Positive Conditioning 
-       * @description Positive conditioning for generation
-       */
-      positive_conditioning?: components["schemas"]["ConditioningField"];
-      /**
-       * Negative Conditioning 
-       * @description Negative conditioning for generation
-       */
-      negative_conditioning?: components["schemas"]["ConditioningField"];
-      /**
-       * Noise 
-       * @description The noise to use
-       */
-      noise?: components["schemas"]["LatentsField"];
-      /**
-       * Steps 
-       * @description The number of steps to use to generate the image 
-       * @default 10
-       */
-      steps?: number;
-      /**
-       * Cfg Scale 
-       * @description The Classifier-Free Guidance, higher values may result in a result closer to the prompt 
-       * @default 7.5
-       */
-      cfg_scale?: number | (number)[];
-      /**
-       * Scheduler 
-       * @description The scheduler to use 
-       * @default euler 
-       * @enum {string}
-       */
-      scheduler?: "ddim" | "ddpm" | "deis" | "lms" | "lms_k" | "pndm" | "heun" | "heun_k" | "euler" | "euler_k" | "euler_a" | "kdpm_2" | "kdpm_2_a" | "dpmpp_2s" | "dpmpp_2s_k" | "dpmpp_2m" | "dpmpp_2m_k" | "dpmpp_2m_sde" | "dpmpp_2m_sde_k" | "dpmpp_sde" | "dpmpp_sde_k" | "unipc";
-      /**
-       * Unet 
-       * @description UNet submodel
-       */
-      unet?: components["schemas"]["UNetField"];
-      /**
-       * Latents 
-       * @description Initial latents
-       */
-      latents?: components["schemas"]["LatentsField"];
-      /**
-       * Denoising Start 
-       * @default 0
-       */
-      denoising_start?: number;
-      /**
-       * Denoising End 
-       * @default 1
-       */
-      denoising_end?: number;
-    };
-    /**
      * SDXLLoraLoaderInvocation 
      * @description Apply selected lora to unet and text_encoder.
      */
@@ -5173,81 +5081,6 @@ export type components = {
       vae?: components["schemas"]["VaeField"];
     };
     /**
-     * SDXLRawPromptInvocation 
-     * @description Pass unmodified prompt to conditioning without compel processing.
-     */
-    SDXLRawPromptInvocation: {
-      /**
-       * Id 
-       * @description The id of this node. Must be unique among all nodes.
-       */
-      id: string;
-      /**
-       * Is Intermediate 
-       * @description Whether or not this node is an intermediate node. 
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Type 
-       * @default sdxl_raw_prompt 
-       * @enum {string}
-       */
-      type?: "sdxl_raw_prompt";
-      /**
-       * Prompt 
-       * @description Prompt 
-       * @default
-       */
-      prompt?: string;
-      /**
-       * Style 
-       * @description Style prompt 
-       * @default
-       */
-      style?: string;
-      /**
-       * Original Width 
-       * @default 1024
-       */
-      original_width?: number;
-      /**
-       * Original Height 
-       * @default 1024
-       */
-      original_height?: number;
-      /**
-       * Crop Top 
-       * @default 0
-       */
-      crop_top?: number;
-      /**
-       * Crop Left 
-       * @default 0
-       */
-      crop_left?: number;
-      /**
-       * Target Width 
-       * @default 1024
-       */
-      target_width?: number;
-      /**
-       * Target Height 
-       * @default 1024
-       */
-      target_height?: number;
-      /**
-       * Clip 
-       * @description Clip to use
-       */
-      clip?: components["schemas"]["ClipField"];
-      /**
-       * Clip2 
-       * @description Clip2 to use
-       */
-      clip2?: components["schemas"]["ClipField"];
-    };
-    /**
      * SDXLRefinerCompelPromptInvocation 
      * @description Parse prompt using compel package to conditioning.
      */
@@ -5360,132 +5193,6 @@ export type components = {
        * @description Vae submodel
        */
       vae?: components["schemas"]["VaeField"];
-    };
-    /**
-     * SDXLRefinerRawPromptInvocation 
-     * @description Parse prompt using compel package to conditioning.
-     */
-    SDXLRefinerRawPromptInvocation: {
-      /**
-       * Id 
-       * @description The id of this node. Must be unique among all nodes.
-       */
-      id: string;
-      /**
-       * Is Intermediate 
-       * @description Whether or not this node is an intermediate node. 
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Type 
-       * @default sdxl_refiner_raw_prompt 
-       * @enum {string}
-       */
-      type?: "sdxl_refiner_raw_prompt";
-      /**
-       * Style 
-       * @description Style prompt 
-       * @default
-       */
-      style?: string;
-      /**
-       * Original Width 
-       * @default 1024
-       */
-      original_width?: number;
-      /**
-       * Original Height 
-       * @default 1024
-       */
-      original_height?: number;
-      /**
-       * Crop Top 
-       * @default 0
-       */
-      crop_top?: number;
-      /**
-       * Crop Left 
-       * @default 0
-       */
-      crop_left?: number;
-      /**
-       * Aesthetic Score 
-       * @default 6
-       */
-      aesthetic_score?: number;
-      /**
-       * Clip2 
-       * @description Clip to use
-       */
-      clip2?: components["schemas"]["ClipField"];
-    };
-    /**
-     * SDXLTextToLatentsInvocation 
-     * @description Generates latents from conditionings.
-     */
-    SDXLTextToLatentsInvocation: {
-      /**
-       * Id 
-       * @description The id of this node. Must be unique among all nodes.
-       */
-      id: string;
-      /**
-       * Is Intermediate 
-       * @description Whether or not this node is an intermediate node. 
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Type 
-       * @default t2l_sdxl 
-       * @enum {string}
-       */
-      type?: "t2l_sdxl";
-      /**
-       * Positive Conditioning 
-       * @description Positive conditioning for generation
-       */
-      positive_conditioning?: components["schemas"]["ConditioningField"];
-      /**
-       * Negative Conditioning 
-       * @description Negative conditioning for generation
-       */
-      negative_conditioning?: components["schemas"]["ConditioningField"];
-      /**
-       * Noise 
-       * @description The noise to use
-       */
-      noise?: components["schemas"]["LatentsField"];
-      /**
-       * Steps 
-       * @description The number of steps to use to generate the image 
-       * @default 10
-       */
-      steps?: number;
-      /**
-       * Cfg Scale 
-       * @description The Classifier-Free Guidance, higher values may result in a result closer to the prompt 
-       * @default 7.5
-       */
-      cfg_scale?: number | (number)[];
-      /**
-       * Scheduler 
-       * @description The scheduler to use 
-       * @default euler 
-       * @enum {string}
-       */
-      scheduler?: "ddim" | "ddpm" | "deis" | "lms" | "lms_k" | "pndm" | "heun" | "heun_k" | "euler" | "euler_k" | "euler_a" | "kdpm_2" | "kdpm_2_a" | "dpmpp_2s" | "dpmpp_2s_k" | "dpmpp_2m" | "dpmpp_2m_k" | "dpmpp_2m_sde" | "dpmpp_2m_sde_k" | "dpmpp_sde" | "dpmpp_sde_k" | "unipc";
-      /**
-       * Unet 
-       * @description UNet submodel
-       */
-      unet?: components["schemas"]["UNetField"];
-      /**
-       * Denoising End 
-       * @default 1
-       */
-      denoising_end?: number;
     };
     /**
      * ScaleLatentsInvocation 
@@ -5885,73 +5592,6 @@ export type components = {
        */
       b?: number;
     };
-    /**
-     * TextToLatentsInvocation 
-     * @description Generates latents from conditionings.
-     */
-    TextToLatentsInvocation: {
-      /**
-       * Id 
-       * @description The id of this node. Must be unique among all nodes.
-       */
-      id: string;
-      /**
-       * Is Intermediate 
-       * @description Whether or not this node is an intermediate node. 
-       * @default false
-       */
-      is_intermediate?: boolean;
-      /**
-       * Type 
-       * @default t2l 
-       * @enum {string}
-       */
-      type?: "t2l";
-      /**
-       * Positive Conditioning 
-       * @description Positive conditioning for generation
-       */
-      positive_conditioning?: components["schemas"]["ConditioningField"];
-      /**
-       * Negative Conditioning 
-       * @description Negative conditioning for generation
-       */
-      negative_conditioning?: components["schemas"]["ConditioningField"];
-      /**
-       * Noise 
-       * @description The noise to use
-       */
-      noise?: components["schemas"]["LatentsField"];
-      /**
-       * Steps 
-       * @description The number of steps to use to generate the image 
-       * @default 10
-       */
-      steps?: number;
-      /**
-       * Cfg Scale 
-       * @description The Classifier-Free Guidance, higher values may result in a result closer to the prompt 
-       * @default 7.5
-       */
-      cfg_scale?: number | (number)[];
-      /**
-       * Scheduler 
-       * @description The scheduler to use 
-       * @default euler 
-       * @enum {string}
-       */
-      scheduler?: "ddim" | "ddpm" | "deis" | "lms" | "lms_k" | "pndm" | "heun" | "heun_k" | "euler" | "euler_k" | "euler_a" | "kdpm_2" | "kdpm_2_a" | "dpmpp_2s" | "dpmpp_2s_k" | "dpmpp_2m" | "dpmpp_2m_k" | "dpmpp_2m_sde" | "dpmpp_2m_sde_k" | "dpmpp_sde" | "dpmpp_sde_k" | "unipc";
-      /**
-       * Unet 
-       * @description UNet submodel
-       */
-      unet?: components["schemas"]["UNetField"];
-      /**
-       * Control 
-       * @description The control to use
-       */
-      control?: components["schemas"]["ControlField"] | (components["schemas"]["ControlField"])[];
-    };
     /** TextualInversionModelConfig */
     TextualInversionModelConfig: {
       /** Model Name */
@@ -6168,7 +5808,7 @@ export type components = {
      */
     StableDiffusionOnnxModelFormat: "olive" | "onnx";
     /**
-     * StableDiffusion2ModelFormat 
+     * StableDiffusion1ModelFormat 
      * @description An enumeration. 
      * @enum {string}
      */
