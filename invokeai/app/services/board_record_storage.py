@@ -1,16 +1,14 @@
-from abc import ABC, abstractmethod
-from typing import Optional, cast
 import sqlite3
 import threading
-from typing import Optional, Union
 import uuid
-from invokeai.app.services.image_record_storage import OffsetPaginatedResults
-from invokeai.app.services.models.board_record import (
-    BoardRecord,
-    deserialize_board_record,
-)
+from abc import ABC, abstractmethod
+from typing import Optional, Union, cast
 
-from pydantic import BaseModel, Field, Extra
+from pydantic import BaseModel, Extra, Field
+
+from invokeai.app.services.image_record_storage import OffsetPaginatedResults
+from invokeai.app.services.models.board_record import BoardRecord, deserialize_board_record
+from invokeai.app.services.thread import SqliteLock
 
 
 class BoardChanges(BaseModel, extra=Extra.forbid):
@@ -93,7 +91,6 @@ class SqliteBoardRecordStorage(BoardRecordStorageBase):
     _filename: str
     _conn: sqlite3.Connection
     _cursor: sqlite3.Cursor
-    _lock: threading.Lock
 
     def __init__(self, filename: str) -> None:
         super().__init__()
@@ -102,16 +99,11 @@ class SqliteBoardRecordStorage(BoardRecordStorageBase):
         # Enable row factory to get rows as dictionaries (must be done before making the cursor!)
         self._conn.row_factory = sqlite3.Row
         self._cursor = self._conn.cursor()
-        self._lock = threading.Lock()
-
-        try:
-            self._lock.acquire()
+        with SqliteLock():
             # Enable foreign keys
             self._conn.execute("PRAGMA foreign_keys = ON;")
             self._create_tables()
             self._conn.commit()
-        finally:
-            self._lock.release()
 
     def _create_tables(self) -> None:
         """Creates the `boards` table and `board_images` junction table."""
@@ -153,68 +145,62 @@ class SqliteBoardRecordStorage(BoardRecordStorageBase):
         )
 
     def delete(self, board_id: str) -> None:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                DELETE FROM boards
-                WHERE board_id = ?;
-                """,
-                (board_id,),
-            )
-            self._conn.commit()
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BoardRecordDeleteException from e
-        except Exception as e:
-            self._conn.rollback()
-            raise BoardRecordDeleteException from e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    DELETE FROM boards
+                    WHERE board_id = ?;
+                    """,
+                    (board_id,),
+                )
+                self._conn.commit()
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BoardRecordDeleteException from e
+            except Exception as e:
+                self._conn.rollback()
+                raise BoardRecordDeleteException from e
 
     def save(
         self,
         board_name: str,
     ) -> BoardRecord:
-        try:
-            board_id = str(uuid.uuid4())
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                INSERT OR IGNORE INTO boards (board_id, board_name)
-                VALUES (?, ?);
-                """,
-                (board_id, board_name),
-            )
-            self._conn.commit()
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BoardRecordSaveException from e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                board_id = str(uuid.uuid4())
+                self._cursor.execute(
+                    """--sql
+                    INSERT OR IGNORE INTO boards (board_id, board_name)
+                    VALUES (?, ?);
+                    """,
+                    (board_id, board_name),
+                )
+                self._conn.commit()
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BoardRecordSaveException from e
         return self.get(board_id)
 
     def get(
         self,
         board_id: str,
     ) -> BoardRecord:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                SELECT *
-                FROM boards
-                WHERE board_id = ?;
-                """,
-                (board_id,),
-            )
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    SELECT *
+                    FROM boards
+                    WHERE board_id = ?;
+                    """,
+                    (board_id,),
+                )
 
-            result = cast(Union[sqlite3.Row, None], self._cursor.fetchone())
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BoardRecordNotFoundException from e
-        finally:
-            self._lock.release()
+                result = cast(Union[sqlite3.Row, None], self._cursor.fetchone())
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BoardRecordNotFoundException from e
         if result is None:
             raise BoardRecordNotFoundException
         return BoardRecord(**dict(result))
@@ -224,37 +210,34 @@ class SqliteBoardRecordStorage(BoardRecordStorageBase):
         board_id: str,
         changes: BoardChanges,
     ) -> BoardRecord:
-        try:
-            self._lock.acquire()
+        with SqliteLock():
+            try:
+                # Change the name of a board
+                if changes.board_name is not None:
+                    self._cursor.execute(
+                        f"""--sql
+                        UPDATE boards
+                        SET board_name = ?
+                        WHERE board_id = ?;
+                        """,
+                        (changes.board_name, board_id),
+                    )
 
-            # Change the name of a board
-            if changes.board_name is not None:
-                self._cursor.execute(
-                    f"""--sql
-                    UPDATE boards
-                    SET board_name = ?
-                    WHERE board_id = ?;
-                    """,
-                    (changes.board_name, board_id),
-                )
+                # Change the cover image of a board
+                if changes.cover_image_name is not None:
+                    self._cursor.execute(
+                        f"""--sql
+                        UPDATE boards
+                        SET cover_image_name = ?
+                        WHERE board_id = ?;
+                        """,
+                        (changes.cover_image_name, board_id),
+                    )
 
-            # Change the cover image of a board
-            if changes.cover_image_name is not None:
-                self._cursor.execute(
-                    f"""--sql
-                    UPDATE boards
-                    SET cover_image_name = ?
-                    WHERE board_id = ?;
-                    """,
-                    (changes.cover_image_name, board_id),
-                )
-
-            self._conn.commit()
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BoardRecordSaveException from e
-        finally:
-            self._lock.release()
+                self._conn.commit()
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BoardRecordSaveException from e
         return self.get(board_id)
 
     def get_many(
@@ -262,64 +245,52 @@ class SqliteBoardRecordStorage(BoardRecordStorageBase):
         offset: int = 0,
         limit: int = 10,
     ) -> OffsetPaginatedResults[BoardRecord]:
-        try:
-            self._lock.acquire()
+        with SqliteLock():
+            try:
+                # Get all the boards
+                self._cursor.execute(
+                    """--sql
+                    SELECT *
+                    FROM boards
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?;
+                    """,
+                    (limit, offset),
+                )
 
-            # Get all the boards
-            self._cursor.execute(
-                """--sql
-                SELECT *
-                FROM boards
-                ORDER BY created_at DESC
-                LIMIT ? OFFSET ?;
-                """,
-                (limit, offset),
-            )
+                result = cast(list[sqlite3.Row], self._cursor.fetchall())
+                boards = list(map(lambda r: deserialize_board_record(dict(r)), result))
 
-            result = cast(list[sqlite3.Row], self._cursor.fetchall())
-            boards = list(map(lambda r: deserialize_board_record(dict(r)), result))
-
-            # Get the total number of boards
-            self._cursor.execute(
-                """--sql
-                SELECT COUNT(*)
-                FROM boards
-                WHERE 1=1;
-                """
-            )
-
-            count = cast(int, self._cursor.fetchone()[0])
-
-            return OffsetPaginatedResults[BoardRecord](items=boards, offset=offset, limit=limit, total=count)
-
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise e
-        finally:
-            self._lock.release()
+                # Get the total number of boards
+                self._cursor.execute(
+                    """--sql
+                    SELECT COUNT(*)
+                    FROM boards
+                    WHERE 1=1;
+                    """
+                )
+                count = cast(int, self._cursor.fetchone()[0])
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise e
+        return OffsetPaginatedResults[BoardRecord](items=boards, offset=offset, limit=limit, total=count)
 
     def get_all(
         self,
     ) -> list[BoardRecord]:
-        try:
-            self._lock.acquire()
-
-            # Get all the boards
-            self._cursor.execute(
-                """--sql
-                SELECT *
-                FROM boards
-                ORDER BY created_at DESC
-                """
-            )
-
-            result = cast(list[sqlite3.Row], self._cursor.fetchall())
-            boards = list(map(lambda r: deserialize_board_record(dict(r)), result))
-
-            return boards
-
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                # Get all the boards
+                self._cursor.execute(
+                    """--sql
+                    SELECT *
+                    FROM boards
+                    ORDER BY created_at DESC
+                    """
+                )
+                result = cast(list[sqlite3.Row], self._cursor.fetchall())
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise e
+        boards = list(map(lambda r: deserialize_board_record(dict(r)), result))
+        return boards

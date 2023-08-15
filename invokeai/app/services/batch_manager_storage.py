@@ -2,9 +2,7 @@ from abc import ABC, abstractmethod
 from typing import cast
 import uuid
 import sqlite3
-import threading
 from typing import (
-    Any,
     List,
     Literal,
     Optional,
@@ -15,15 +13,16 @@ import json
 from invokeai.app.invocations.baseinvocation import (
     BaseInvocation,
 )
+from invokeai.app.services.thread import SqliteLock
 from invokeai.app.services.graph import Graph
 from invokeai.app.models.image import ImageField
 
-from pydantic import BaseModel, Field, Extra, parse_raw_as
+from pydantic import BaseModel, Field, Extra, StrictFloat, StrictInt, StrictStr, parse_raw_as
 
 invocations = BaseInvocation.get_invocations()
 InvocationsUnion = Union[invocations]  # type: ignore
 
-BatchDataType = Union[str, int, float, ImageField]
+BatchDataType = Union[StrictStr, StrictInt, StrictFloat, ImageField]
 
 
 class Batch(BaseModel):
@@ -172,7 +171,6 @@ class SqliteBatchProcessStorage(BatchProcessStorageBase):
     _filename: str
     _conn: sqlite3.Connection
     _cursor: sqlite3.Cursor
-    _lock: threading.Lock
 
     def __init__(self, filename: str) -> None:
         super().__init__()
@@ -181,16 +179,12 @@ class SqliteBatchProcessStorage(BatchProcessStorageBase):
         # Enable row factory to get rows as dictionaries (must be done before making the cursor!)
         self._conn.row_factory = sqlite3.Row
         self._cursor = self._conn.cursor()
-        self._lock = threading.Lock()
 
-        try:
-            self._lock.acquire()
+        with SqliteLock():
             # Enable foreign keys
             self._conn.execute("PRAGMA foreign_keys = ON;")
             self._create_tables()
             self._conn.commit()
-        finally:
-            self._lock.release()
 
     def _create_tables(self) -> None:
         """Creates the `batch_process` table and `batch_session` junction table."""
@@ -279,45 +273,41 @@ class SqliteBatchProcessStorage(BatchProcessStorageBase):
         )
 
     def delete(self, batch_id: str) -> None:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                DELETE FROM batch_process
-                WHERE batch_id = ?;
-                """,
-                (batch_id,),
-            )
-            self._conn.commit()
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BatchProcessDeleteException from e
-        except Exception as e:
-            self._conn.rollback()
-            raise BatchProcessDeleteException from e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    DELETE FROM batch_process
+                    WHERE batch_id = ?;
+                    """,
+                    (batch_id,),
+                )
+                self._conn.commit()
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BatchProcessDeleteException from e
+            except Exception as e:
+                self._conn.rollback()
+                raise BatchProcessDeleteException from e
 
     def save(
         self,
         batch_process: BatchProcess,
     ) -> BatchProcess:
-        try:
-            self._lock.acquire()
-            batches = [batch.json() for batch in batch_process.batches]
-            self._cursor.execute(
-                """--sql
-                INSERT OR IGNORE INTO batch_process (batch_id, batches, graph)
-                VALUES (?, ?, ?);
-                """,
-                (batch_process.batch_id, json.dumps(batches), batch_process.graph.json()),
-            )
-            self._conn.commit()
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BatchProcessSaveException from e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                batches = [batch.json() for batch in batch_process.batches]
+                self._cursor.execute(
+                    """--sql
+                    INSERT OR IGNORE INTO batch_process (batch_id, batches, graph)
+                    VALUES (?, ?, ?);
+                    """,
+                    (batch_process.batch_id, json.dumps(batches), batch_process.graph.json()),
+                )
+                self._conn.commit()
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BatchProcessSaveException from e
         return self.get(batch_process.batch_id)
 
     def _deserialize_batch_process(self, session_dict: dict) -> BatchProcess:
@@ -339,23 +329,21 @@ class SqliteBatchProcessStorage(BatchProcessStorageBase):
         self,
         batch_id: str,
     ) -> BatchProcess:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                SELECT *
-                FROM batch_process
-                WHERE batch_id = ?;
-                """,
-                (batch_id,),
-            )
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    SELECT *
+                    FROM batch_process
+                    WHERE batch_id = ?;
+                    """,
+                    (batch_id,),
+                )
 
-            result = cast(Union[sqlite3.Row, None], self._cursor.fetchone())
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BatchProcessNotFoundException from e
-        finally:
-            self._lock.release()
+                result = cast(Union[sqlite3.Row, None], self._cursor.fetchone())
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BatchProcessNotFoundException from e
         if result is None:
             raise BatchProcessNotFoundException
         return self._deserialize_batch_process(dict(result))
@@ -364,62 +352,56 @@ class SqliteBatchProcessStorage(BatchProcessStorageBase):
         self,
         batch_id: str,
     ):
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                f"""--sql
-                UPDATE batch_process
-                SET canceled = 1
-                WHERE batch_id = ?;
-                """,
-                (batch_id,),
-            )
-            self._conn.commit()
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BatchSessionSaveException from e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    f"""--sql
+                    UPDATE batch_process
+                    SET canceled = 1
+                    WHERE batch_id = ?;
+                    """,
+                    (batch_id,),
+                )
+                self._conn.commit()
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BatchSessionSaveException from e
 
     def create_session(
         self,
         session: BatchSession,
     ) -> BatchSession:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                INSERT OR IGNORE INTO batch_session (batch_id, session_id, state)
-                VALUES (?, ?, ?);
-                """,
-                (session.batch_id, session.session_id, session.state),
-            )
-            self._conn.commit()
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BatchSessionSaveException from e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    INSERT OR IGNORE INTO batch_session (batch_id, session_id, state)
+                    VALUES (?, ?, ?);
+                    """,
+                    (session.batch_id, session.session_id, session.state),
+                )
+                self._conn.commit()
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BatchSessionSaveException from e
         return self.get_session(session.session_id)
 
     def get_session(self, session_id: str) -> BatchSession:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                SELECT *
-                FROM batch_session
-                WHERE session_id= ?;
-                """,
-                (session_id,),
-            )
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    SELECT *
+                    FROM batch_session
+                    WHERE session_id= ?;
+                    """,
+                    (session_id,),
+                )
 
-            result = cast(Union[sqlite3.Row, None], self._cursor.fetchone())
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BatchSessionNotFoundException from e
-        finally:
-            self._lock.release()
+                result = cast(Union[sqlite3.Row, None], self._cursor.fetchone())
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BatchSessionNotFoundException from e
         if result is None:
             raise BatchSessionNotFoundException
         return self._deserialize_batch_session(dict(result))
@@ -440,46 +422,42 @@ class SqliteBatchProcessStorage(BatchProcessStorageBase):
         )
 
     def get_created_session(self, batch_id: str) -> BatchSession:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                SELECT *
-                FROM batch_session
-                WHERE batch_id = ? AND state = 'created';
-                """,
-                (batch_id,),
-            )
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    SELECT *
+                    FROM batch_session
+                    WHERE batch_id = ? AND state = 'created';
+                    """,
+                    (batch_id,),
+                )
 
-            result = cast(list[sqlite3.Row], self._cursor.fetchone())
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BatchSessionNotFoundException from e
-        finally:
-            self._lock.release()
+                result = cast(Optional[sqlite3.Row], self._cursor.fetchone())
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BatchSessionNotFoundException from e
         if result is None:
             raise BatchSessionNotFoundException
         session = self._deserialize_batch_session(dict(result))
         return session
 
     def get_created_sessions(self, batch_id: str) -> List[BatchSession]:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                SELECT *
-                FROM batch_session
-                WHERE batch_id = ? AND state = created;
-                """,
-                (batch_id,),
-            )
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    SELECT *
+                    FROM batch_session
+                    WHERE batch_id = ? AND state = created;
+                    """,
+                    (batch_id,),
+                )
 
-            result = cast(list[sqlite3.Row], self._cursor.fetchall())
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BatchSessionNotFoundException from e
-        finally:
-            self._lock.release()
+                result = cast(list[sqlite3.Row], self._cursor.fetchall())
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BatchSessionNotFoundException from e
         if result is None:
             raise BatchSessionNotFoundException
         sessions = list(map(lambda r: self._deserialize_batch_session(dict(r)), result))
@@ -491,24 +469,21 @@ class SqliteBatchProcessStorage(BatchProcessStorageBase):
         session_id: str,
         changes: BatchSessionChanges,
     ) -> BatchSession:
-        try:
-            self._lock.acquire()
+        with SqliteLock():
+            try:
+                # Change the state of a batch session
+                if changes.state is not None:
+                    self._cursor.execute(
+                        f"""--sql
+                        UPDATE batch_session
+                        SET state = ?
+                        WHERE batch_id = ? AND session_id = ?;
+                        """,
+                        (changes.state, batch_id, session_id),
+                    )
 
-            # Change the state of a batch session
-            if changes.state is not None:
-                self._cursor.execute(
-                    f"""--sql
-                    UPDATE batch_session
-                    SET state = ?
-                    WHERE batch_id = ? AND session_id = ?;
-                    """,
-                    (changes.state, batch_id, session_id),
-                )
-
-            self._conn.commit()
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise BatchSessionSaveException from e
-        finally:
-            self._lock.release()
+                    self._conn.commit()
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise BatchSessionSaveException from e
         return self.get_session(session_id)

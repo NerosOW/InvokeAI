@@ -1,13 +1,10 @@
-from abc import ABC, abstractmethod
 import sqlite3
-import threading
+from abc import ABC, abstractmethod
 from typing import Optional, cast
 
 from invokeai.app.services.image_record_storage import OffsetPaginatedResults
-from invokeai.app.services.models.image_record import (
-    ImageRecord,
-    deserialize_image_record,
-)
+from invokeai.app.services.models.image_record import ImageRecord, deserialize_image_record
+from invokeai.app.services.thread import SqliteLock
 
 
 class BoardImageRecordStorageBase(ABC):
@@ -59,7 +56,6 @@ class SqliteBoardImageRecordStorage(BoardImageRecordStorageBase):
     _filename: str
     _conn: sqlite3.Connection
     _cursor: sqlite3.Cursor
-    _lock: threading.Lock
 
     def __init__(self, filename: str) -> None:
         super().__init__()
@@ -68,16 +64,11 @@ class SqliteBoardImageRecordStorage(BoardImageRecordStorageBase):
         # Enable row factory to get rows as dictionaries (must be done before making the cursor!)
         self._conn.row_factory = sqlite3.Row
         self._cursor = self._conn.cursor()
-        self._lock = threading.Lock()
-
-        try:
-            self._lock.acquire()
+        with SqliteLock():
             # Enable foreign keys
             self._conn.execute("PRAGMA foreign_keys = ON;")
             self._create_tables()
             self._conn.commit()
-        finally:
-            self._lock.release()
 
     def _create_tables(self) -> None:
         """Creates the `board_images` junction table."""
@@ -134,42 +125,38 @@ class SqliteBoardImageRecordStorage(BoardImageRecordStorageBase):
         board_id: str,
         image_name: str,
     ) -> None:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                INSERT INTO board_images (board_id, image_name)
-                VALUES (?, ?)
-                ON CONFLICT (image_name) DO UPDATE SET board_id = ?;
-                """,
-                (board_id, image_name, board_id),
-            )
-            self._conn.commit()
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    INSERT INTO board_images (board_id, image_name)
+                    VALUES (?, ?)
+                    ON CONFLICT (image_name) DO UPDATE SET board_id = ?;
+                    """,
+                    (board_id, image_name, board_id),
+                )
+                self._conn.commit()
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise e
 
     def remove_image_from_board(
         self,
         image_name: str,
     ) -> None:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                DELETE FROM board_images
-                WHERE image_name = ?;
-                """,
-                (image_name,),
-            )
-            self._conn.commit()
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    DELETE FROM board_images
+                    WHERE image_name = ?;
+                    """,
+                    (image_name,),
+                )
+                self._conn.commit()
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise e
 
     def get_images_for_board(
         self,
@@ -177,93 +164,83 @@ class SqliteBoardImageRecordStorage(BoardImageRecordStorageBase):
         offset: int = 0,
         limit: int = 10,
     ) -> OffsetPaginatedResults[ImageRecord]:
-        # TODO: this isn't paginated yet?
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                SELECT images.*
-                FROM board_images
-                INNER JOIN images ON board_images.image_name = images.image_name
-                WHERE board_images.board_id = ?
-                ORDER BY board_images.updated_at DESC;
-                """,
-                (board_id,),
-            )
-            result = cast(list[sqlite3.Row], self._cursor.fetchall())
-            images = list(map(lambda r: deserialize_image_record(dict(r)), result))
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    SELECT images.*
+                    FROM board_images
+                    INNER JOIN images ON board_images.image_name = images.image_name
+                    WHERE board_images.board_id = ?
+                    ORDER BY board_images.updated_at DESC;
+                    """,
+                    (board_id,),
+                )
+                result = cast(list[sqlite3.Row], self._cursor.fetchall())
+                images = list(map(lambda r: deserialize_image_record(dict(r)), result))
 
-            self._cursor.execute(
-                """--sql
-                SELECT COUNT(*) FROM images WHERE 1=1;
-                """
-            )
-            count = cast(int, self._cursor.fetchone()[0])
-
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise e
-        finally:
-            self._lock.release()
+                self._cursor.execute(
+                    """--sql
+                    SELECT COUNT(*) FROM images WHERE 1=1;
+                    """
+                )
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise e
+        count = cast(int, self._cursor.fetchone()[0])
         return OffsetPaginatedResults(items=images, offset=offset, limit=limit, total=count)
 
     def get_all_board_image_names_for_board(self, board_id: str) -> list[str]:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                SELECT image_name
-                FROM board_images
-                WHERE board_id = ?;
-                """,
-                (board_id,),
-            )
-            result = cast(list[sqlite3.Row], self._cursor.fetchall())
-            image_names = list(map(lambda r: r[0], result))
-            return image_names
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    SELECT image_name
+                    FROM board_images
+                    WHERE board_id = ?;
+                    """,
+                    (board_id,),
+                )
+                result = cast(list[sqlite3.Row], self._cursor.fetchall())
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise e
+        image_names = list(map(lambda r: r[0], result))
+        return image_names
 
     def get_board_for_image(
         self,
         image_name: str,
     ) -> Optional[str]:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                SELECT board_id
-                FROM board_images
-                WHERE image_name = ?;
-                """,
-                (image_name,),
-            )
-            result = self._cursor.fetchone()
-            if result is None:
-                return None
-            return cast(str, result[0])
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    SELECT board_id
+                    FROM board_images
+                    WHERE image_name = ?;
+                    """,
+                    (image_name,),
+                )
+                result = self._cursor.fetchone()
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise e
+        if result is None:
+            return None
+        return cast(str, result[0])
 
     def get_image_count_for_board(self, board_id: str) -> int:
-        try:
-            self._lock.acquire()
-            self._cursor.execute(
-                """--sql
-                SELECT COUNT(*) FROM board_images WHERE board_id = ?;
-                """,
-                (board_id,),
-            )
-            count = cast(int, self._cursor.fetchone()[0])
-            return count
-        except sqlite3.Error as e:
-            self._conn.rollback()
-            raise e
-        finally:
-            self._lock.release()
+        with SqliteLock():
+            try:
+                self._cursor.execute(
+                    """--sql
+                    SELECT COUNT(*) FROM board_images WHERE board_id = ?;
+                    """,
+                    (board_id,),
+                )
+                count = cast(int, self._cursor.fetchone()[0])
+            except sqlite3.Error as e:
+                self._conn.rollback()
+                raise e
+        return count
