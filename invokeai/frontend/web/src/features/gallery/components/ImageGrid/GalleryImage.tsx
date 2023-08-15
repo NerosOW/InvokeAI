@@ -1,4 +1,4 @@
-import { Box, Flex, useColorModeValue } from '@chakra-ui/react';
+import { Box, Flex } from '@chakra-ui/react';
 import {
   ImageDTOsDraggableData,
   ImageDraggableData,
@@ -11,12 +11,12 @@ import { useMultiselect } from 'features/gallery/hooks/useMultiselect.ts';
 import { imagesToDeleteSelected } from 'features/deleteImageModal/store/slice';
 import { MouseEvent, memo, useCallback, useMemo, useState } from 'react';
 import {
-  useChangeImagePinnedMutation,
   useGetImageDTOQuery,
+  useStarImagesMutation,
+  useUnstarImagesMutation,
 } from 'services/api/endpoints/images';
 import { MdStar, MdStarBorder } from 'react-icons/md';
 import { FaTrash } from 'react-icons/fa';
-import IAIIconButton from '../../../../common/components/IAIIconButton';
 import IAIDndImageIcon from '../../../../common/components/IAIDndImageIcon';
 
 interface HoverableImageProps {
@@ -65,40 +65,26 @@ const GalleryImage = (props: HoverableImageProps) => {
     }
   }, [imageDTO, selection, selectionCount]);
 
-  const [togglePin] = useChangeImagePinnedMutation();
+  const [starImages] = useStarImagesMutation();
+  const [unstarImages] = useUnstarImagesMutation();
 
-  const togglePinnedState = useCallback(() => {
+  const toggleStarredState = useCallback(() => {
     if (imageDTO) {
-      togglePin({ imageDTO, pinned: !imageDTO.pinned });
+      if (imageDTO.starred) {
+        unstarImages({ images: [imageDTO] });
+      }
+      if (!imageDTO.starred) {
+        starImages({ images: [imageDTO] });
+      }
     }
-  }, [togglePin, imageDTO]);
+  }, [starImages, unstarImages, imageDTO]);
 
   const [isHovered, setIsHovered] = useState(false);
 
-  const pinIcon = useMemo(() => {
-    if (imageDTO?.pinned) return <MdStar size="20" />;
-    if (!imageDTO?.pinned && isHovered) return <MdStarBorder size="20" />;
-  }, [imageDTO?.pinned, isHovered]);
-
-  const resetIconShadow = useColorModeValue(
-    `drop-shadow(0px 0px 0.1rem var(--invokeai-colors-base-600))`,
-    `drop-shadow(0px 0px 0.1rem var(--invokeai-colors-base-800))`
-  );
-
-  const iconButtonStyles = {
-    position: 'absolute',
-    top: 1,
-    insetInlineEnd: 1,
-    p: 0,
-    minW: 0,
-    svg: {
-      transitionProperty: 'common',
-      transitionDuration: 'normal',
-      fill: 'base.100',
-      _hover: { fill: 'base.50' },
-      filter: resetIconShadow,
-    },
-  };
+  const starIcon = useMemo(() => {
+    if (imageDTO?.starred) return <MdStar size="20" />;
+    if (!imageDTO?.starred && isHovered) return <MdStarBorder size="20" />;
+  }, [imageDTO?.starred, isHovered]);
 
   if (!imageDTO) {
     return <IAIFillSkeleton />;
@@ -131,9 +117,9 @@ const GalleryImage = (props: HoverableImageProps) => {
         >
           <>
             <IAIDndImageIcon
-              onClick={togglePinnedState}
-              icon={pinIcon}
-              tooltip={imageDTO.pinned ? 'Unstar' : 'Star'}
+              onClick={toggleStarredState}
+              icon={starIcon}
+              tooltip={imageDTO.starred ? 'Unstar' : 'Star'}
             />
 
             {isHovered && shouldShowDeleteButton && (
