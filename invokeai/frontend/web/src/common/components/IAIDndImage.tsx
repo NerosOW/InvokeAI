@@ -1,16 +1,8 @@
-import {
-  ChakraProps,
-  Flex,
-  Icon,
-  Image,
-  useColorMode,
-  useColorModeValue,
-} from '@chakra-ui/react';
+import { ChakraProps, Flex, Icon, Image, useColorMode } from '@chakra-ui/react';
 import {
   TypesafeDraggableData,
   TypesafeDroppableData,
 } from 'app/components/ImageDnd/typesafeDnd';
-import IAIIconButton from 'common/components/IAIIconButton';
 import {
   IAILoadingImageFallback,
   IAINoContentFallback,
@@ -38,10 +30,6 @@ type IAIDndImageProps = {
   onError?: (event: SyntheticEvent<HTMLImageElement>) => void;
   onLoad?: (event: SyntheticEvent<HTMLImageElement>) => void;
   onClick?: (event: MouseEvent<HTMLDivElement>) => void;
-  onClickReset?: (event: MouseEvent<HTMLButtonElement>) => void;
-  withResetIcon?: boolean;
-  resetIcon?: ReactElement;
-  resetTooltip?: string;
   withMetadataOverlay?: boolean;
   isDragDisabled?: boolean;
   isDropDisabled?: boolean;
@@ -58,15 +46,16 @@ type IAIDndImageProps = {
   noContentFallback?: ReactElement;
   useThumbailFallback?: boolean;
   withHoverOverlay?: boolean;
+  children?: JSX.Element;
+  onMouseOver?: () => void;
+  onMouseOut?: () => void;
 };
 
 const IAIDndImage = (props: IAIDndImageProps) => {
   const {
     imageDTO,
-    onClickReset,
     onError,
     onClick,
-    withResetIcon = false,
     withMetadataOverlay = false,
     isDropDisabled = false,
     isDragDisabled = false,
@@ -80,31 +69,29 @@ const IAIDndImage = (props: IAIDndImageProps) => {
     dropLabel,
     isSelected = false,
     thumbnail = false,
-    resetTooltip = 'Reset',
-    resetIcon = <FaUndo />,
     noContentFallback = <IAINoContentFallback icon={FaImage} />,
     useThumbailFallback,
     withHoverOverlay = false,
+    children,
+    onMouseOver,
+    onMouseOut,
   } = props;
 
   const { colorMode } = useColorMode();
   const [isHovered, setIsHovered] = useState(false);
   const handleMouseOver = useCallback(() => {
+    if (onMouseOver) onMouseOver();
     setIsHovered(true);
-  }, []);
+  }, [onMouseOver]);
   const handleMouseOut = useCallback(() => {
+    if (onMouseOut) onMouseOut();
     setIsHovered(false);
-  }, []);
+  }, [onMouseOut]);
 
   const { getUploadButtonProps, getUploadInputProps } = useImageUploadButton({
     postUploadAction,
     isDisabled: isUploadDisabled,
   });
-
-  const resetIconShadow = useColorModeValue(
-    `drop-shadow(0px 0px 0.1rem var(--invokeai-colors-base-600))`,
-    `drop-shadow(0px 0px 0.1rem var(--invokeai-colors-base-800))`
-  );
 
   const uploadButtonStyles = isUploadDisabled
     ? {}
@@ -220,30 +207,7 @@ const IAIDndImage = (props: IAIDndImageProps) => {
               dropLabel={dropLabel}
             />
           )}
-          {onClickReset && withResetIcon && imageDTO && (
-            <IAIIconButton
-              onClick={onClickReset}
-              aria-label={resetTooltip}
-              tooltip={resetTooltip}
-              icon={resetIcon}
-              size="sm"
-              variant="link"
-              sx={{
-                position: 'absolute',
-                top: 1,
-                insetInlineEnd: 1,
-                p: 0,
-                minW: 0,
-                svg: {
-                  transitionProperty: 'common',
-                  transitionDuration: 'normal',
-                  fill: 'base.100',
-                  _hover: { fill: 'base.50' },
-                  filter: resetIconShadow,
-                },
-              }}
-            />
-          )}
+          {children}
         </Flex>
       )}
     </ImageContextMenu>
